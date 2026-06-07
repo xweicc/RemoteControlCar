@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <SurfaceView
+        android:id="@+id/surfaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center" />
+
+    <!-- Left top: Status panel -->
+    <LinearLayout
+        android:id="@+id/statusPanel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start|top"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_status_panel"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvResolution"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvFps"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvBitrate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvTraffic"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvSignal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/tvVoltage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
+    <!-- Right top: Control buttons -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|top"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="12dp"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+        <Button
+            android:id="@+id/btnQuality"
+            android:layout_width="64dp"
+            android:layout_height="36dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="0dp"
+            android:text="@string/quality_hd"
+            android:textColor="@color/status_text"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="64dp"
+            android:layout_height="36dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="0dp"
+            android:text="@string/btn_disconnect"
+            android:textColor="@color/status_text"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/btnLight"
+            android:layout_width="64dp"
+            android:layout_height="36dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="0dp"
+            android:text="@string/light_off"
+            android:textColor="@color/status_text"
+            android:textSize="11sp" />
+
+        <Button
+            android:id="@+id/btnRecord"
+            android:layout_width="64dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="0dp"
+            android:text="@string/btn_record_start"
+            android:textColor="@color/status_text"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvRecordTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="#FF4444"
+            android:textSize="10sp"
+            android:visibility="gone" />
+
+    </LinearLayout>
+
+    <!-- Left bottom: Throttle joystick (forward/backward) -->
+    <com.example.remotecontrolcar.view.JoystickView
+        android:id="@+id/joystickLeft"
+        android:layout_width="160dp"
+        android:layout_height="160dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="24dp"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Right bottom: Steering joystick (left/right) -->
+    <com.example.remotecontrolcar.view.JoystickView
+        android:id="@+id/joystickRight"
+        android:layout_width="160dp"
+        android:layout_height="160dp"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="24dp" />
+
+    <!-- Bottom center: Audio speaker + mic toggle -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:orientation="horizontal"
+        android:gravity="center">
+
+        <ImageButton
+            android:id="@+id/btnMap"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="10dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_map_pin"
+            android:contentDescription="@string/cd_map"
+            android:alpha="0.8" />
+
+        <ImageButton
+            android:id="@+id/btnAudio"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_speaker_off"
+            android:contentDescription="@string/cd_audio_off"
+            android:alpha="0.6" />
+
+        <ImageButton
+            android:id="@+id/btnMic"
+            android:layout_width="96dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_mic_off"
+            android:contentDescription="@string/cd_mic_off"
+            android:alpha="0.6" />
+
+    </LinearLayout>
+
+</FrameLayout>

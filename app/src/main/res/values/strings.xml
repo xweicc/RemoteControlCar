@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">远程遥控车</string>
+    <string name="hint_server_with_port">服务器地址</string>
+    <string name="label_quality">默认画质</string>
+    <string name="btn_enter">进入遥控</string>
+    <string name="status_disconnect">未连接</string>
+    <string name="status_connect">已连接</string>
+    <string name="quality_hd">高清</string>
+    <string name="quality_smooth">流畅</string>
+    <string name="btn_disconnect">断开</string>
+    <string name="btn_connect">连接</string>
+    <string name="light_off">灯:关</string>
+    <string name="light_low">灯:弱</string>
+    <string name="light_mid">灯:中</string>
+    <string name="light_high">灯:强</string>
+    <string name="btn_record_start">录像</string>
+    <string name="btn_record_stop">停止</string>
+    <string name="hint_sn">设备序列号</string>
+    <string name="cd_audio_off">语音对讲：关闭</string>
+    <string name="cd_audio_on">语音对讲：开启</string>
+    <string name="cd_mic_off">麦克风：关闭</string>
+    <string name="cd_mic_on">麦克风：开启</string>
+    <string name="cd_map">定位地图</string>
+    <string name="map_title">遥控车定位</string>
+    <string name="map_close">关闭地图</string>
+</resources>
