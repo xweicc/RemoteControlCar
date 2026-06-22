@@ -29,6 +29,16 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.rgQuality.check(R.id.rbSmooth)
         }
+        if (prefs.getInt("motorMode", 0) == 0) {
+            binding.rgMotorMode.check(R.id.rbMotorBuiltin)
+        } else {
+            binding.rgMotorMode.check(R.id.rbMotorExternal)
+        }
+        if (prefs.getInt("lightMode", 0) == 0) {
+            binding.rgLightMode.check(R.id.rbLightBuiltin)
+        } else {
+            binding.rgLightMode.check(R.id.rbLightExternal)
+        }
 
         binding.btnEnterControl.setOnClickListener {
             if (querying) return@setOnClickListener
@@ -58,10 +68,14 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             val hd = binding.rbHd.isChecked
+            val motorMode = if (binding.rbMotorExternal.isChecked) 1 else 0
+            val lightMode = if (binding.rbLightExternal.isChecked) 1 else 0
             prefs.edit()
                 .putString("server", addressInput)
                 .putString("sn", sn)
                 .putBoolean("hd", hd)
+                .putInt("motorMode", motorMode)
+                .putInt("lightMode", lightMode)
                 .apply()
 
             // 在首页查询端口
@@ -94,6 +108,11 @@ class MainActivity : AppCompatActivity() {
                         .putExtra("video1Port", ports.video1)
                         .putExtra("audioPort", ports.audio)
                         .putExtra("controlPort", ports.control)
+                        .putExtra("videoCtrlPort", ports.videoCtrl)
+                        .putExtra("sshPort", ports.ssh)
+                        .putExtra("rearCamPort", ports.rearCam)
+                        .putExtra("motorMode", motorMode)
+                        .putExtra("lightMode", lightMode)
                 )
             }
         }

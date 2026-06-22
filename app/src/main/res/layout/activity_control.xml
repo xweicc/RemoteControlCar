@@ -71,7 +71,42 @@
             android:textColor="@color/status_text"
             android:textSize="12sp" />
 
+        <TextView
+            android:id="@+id/tvSsh"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp" />
+
     </LinearLayout>
+
+    <!-- Top right: Rear camera small window -->
+    <FrameLayout
+        android:id="@+id/rearCamContainer"
+        android:layout_width="240dp"
+        android:layout_height="180dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="12dp"
+        android:layout_marginEnd="88dp"
+        android:visibility="gone">
+
+        <SurfaceView
+            android:id="@+id/surfaceViewRearCam"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </FrameLayout>
+
+    <!-- Top center: GPS speed -->
+    <TextView
+        android:id="@+id/tvGpsSpeed"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="12dp"
+        android:textColor="@android:color/white"
+        android:textSize="28sp"
+        android:visibility="gone" />
 
     <!-- Right top: Control buttons -->
     <LinearLayout
@@ -95,6 +130,17 @@
             android:textSize="11sp" />
 
         <Button
+            android:id="@+id/btnRearCam"
+            android:layout_width="64dp"
+            android:layout_height="36dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="0dp"
+            android:text="@string/btn_rear_cam"
+            android:textColor="@color/status_text"
+            android:textSize="11sp" />
+
+        <Button
             android:id="@+id/btnConnect"
             android:layout_width="64dp"
             android:layout_height="36dp"
@@ -103,7 +149,8 @@
             android:padding="0dp"
             android:text="@string/btn_disconnect"
             android:textColor="@color/status_text"
-            android:textSize="11sp" />
+            android:textSize="11sp"
+            android:visibility="gone" />
 
         <Button
             android:id="@+id/btnLight"
@@ -173,8 +220,7 @@
             android:padding="10dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_map_pin"
-            android:contentDescription="@string/cd_map"
-            android:alpha="0.8" />
+            android:contentDescription="@string/cd_map" />
 
         <ImageButton
             android:id="@+id/btnAudio"
@@ -185,8 +231,7 @@
             android:padding="8dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_speaker_off"
-            android:contentDescription="@string/cd_audio_off"
-            android:alpha="0.6" />
+            android:contentDescription="@string/cd_audio_off" />
 
         <ImageButton
             android:id="@+id/btnMic"
@@ -196,9 +241,42 @@
             android:padding="8dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_mic_off"
-            android:contentDescription="@string/cd_mic_off"
-            android:alpha="0.6" />
+            android:contentDescription="@string/cd_mic_off" />
 
     </LinearLayout>
+
+    <!-- Right bottom: Exposure control -->
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="200dp"
+        android:layout_marginBottom="24dp">
+
+        <ImageButton
+            android:id="@+id/btnExposure"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_exposure_sun"
+            android:contentDescription="曝光控制" />
+
+        <TextView
+            android:id="@+id/tvExposureValue"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:background="@drawable/bg_control_button"
+            android:textColor="@android:color/white"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true" />
+
+    </FrameLayout>
 
 </FrameLayout>

@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 太阳中心圆 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,7c-2.76,0 -5,2.24 -5,5s2.24,5 5,5 5,-2.24 5,-5 -2.24,-5 -5,-5z" />
+    <!-- 8条放射线：上、下、左、右、左上、右上、左下、右下 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M11,1h2v3h-2zM11,20h2v3h-2zM1,11v2h3v-2zM20,11v2h3v-2zM4.22,4.22l1.42,1.42l-2.12,2.12l-1.42,-1.42zM18.36,18.36l1.42,1.42l-2.12,2.12l-1.42,-1.42zM4.22,19.78l1.42,-1.42l2.12,2.12l-1.42,1.42zM18.36,5.64l1.42,-1.42l2.12,2.12l-1.42,1.42z" />
+</vector>

@@ -10,6 +10,9 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.View
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
 import android.view.WindowManager
 import java.io.File
 import android.widget.FrameLayout
@@ -21,7 +24,9 @@ import androidx.lifecycle.lifecycleScope
 import com.example.remotecontrolcar.databinding.ActivityControlBinding
 import com.example.remotecontrolcar.network.AudioStream
 import com.example.remotecontrolcar.network.ControlClient
+import com.example.remotecontrolcar.network.ExposureClient
 import com.example.remotecontrolcar.network.VideoStreamManager
+import com.example.remotecontrolcar.network.RearCamStream
 import com.example.remotecontrolcar.view.JoystickOrientation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,6 +47,11 @@ class ControlActivity : AppCompatActivity() {
     private var video1Port = 0
     private var audioPort = 0
     private var controlPort = 0
+    private var videoCtrlPort = 0
+    private var sshPort = 0
+    private var rearCamPort = 0
+    private var motorMode = 0
+    private var lightMode = 0
     private var audioStream: AudioStream? = null
     private var hasMicPermission = false
     private var lightLevel = 0
@@ -51,6 +61,17 @@ class ControlActivity : AppCompatActivity() {
     private var recordStartTime = 0L
     private val recordTimer = java.util.Timer()
     private var recordTimerTask: java.util.TimerTask? = null
+
+    // 后视摄像头
+    private var rearCamStream: RearCamStream? = null
+    private var isRearCamOn = false
+
+    // 曝光控制
+    private var exposureClient: ExposureClient? = null
+    private var isManualExposure = false
+    private val exposureValues = arrayOf("1/50", "1/100", "1/150", "1/200", "1/250", "1/500", "1/750", "1/1000", "1/2000", "1/4000")
+    private var exposureIndex = 3 // 默认 1/200
+    private var lastTouchY = 0f
 
     // 手柄摇杆状态
     private var gamepadThrottle = 0f  // 左摇杆 Y，-1~1
@@ -79,6 +100,11 @@ class ControlActivity : AppCompatActivity() {
         video1Port = intent.getIntExtra("video1Port", 0)
         audioPort = intent.getIntExtra("audioPort", 0)
         controlPort = intent.getIntExtra("controlPort", 0)
+        videoCtrlPort = intent.getIntExtra("videoCtrlPort", 0)
+        sshPort = intent.getIntExtra("sshPort", 0)
+        rearCamPort = intent.getIntExtra("rearCamPort", 0)
+        motorMode = intent.getIntExtra("motorMode", 0)
+        lightMode = intent.getIntExtra("lightMode", 0)
         binding.btnQuality.text = if (isHd) getString(R.string.quality_hd) else getString(R.string.quality_smooth)
 
         // Video stream manager
@@ -98,9 +124,46 @@ class ControlActivity : AppCompatActivity() {
                 MapPopupActivity.latestLng = lng
                 MapPopupActivity.latestSpeed = speed
                 MapPopupActivity.hasGpsData = true
+                runOnUiThread {
+                    binding.tvGpsSpeed.visibility = View.VISIBLE
+                    val text = "$speed km/h"
+                    val span = SpannableString(text)
+                    val unitStart = text.indexOf("km/h")
+                    span.setSpan(RelativeSizeSpan(0.5f), unitStart, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    binding.tvGpsSpeed.text = span
+                }
             },
             onConnectionChanged = { connected ->
                 runOnUiThread { updateControlConnection(connected) }
+            }
+        )
+
+        // 曝光控制客户端
+        exposureClient = ExposureClient(
+            onDisconnected = {
+                runOnUiThread {
+                    isManualExposure = false
+                    binding.btnExposure.isEnabled = true
+                    binding.btnExposure.visibility = View.VISIBLE
+                    binding.tvExposureValue.visibility = View.GONE
+                }
+            },
+            onConnected = { success ->
+                runOnUiThread {
+                    binding.btnExposure.isEnabled = true
+                    if (success) {
+                        // 连接成功，显示手动模式
+                        isManualExposure = true
+                        binding.btnExposure.visibility = View.GONE
+                        binding.tvExposureValue.visibility = View.VISIBLE
+                        binding.tvExposureValue.text = exposureValues[exposureIndex]
+                        exposureClient?.startSending(lifecycleScope)
+                        exposureClient?.setExposure(exposureValues[exposureIndex])
+                    } else {
+                        // 连接失败，恢复按钮状态
+                        android.widget.Toast.makeText(this, "曝光控制连接失败", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         )
 
@@ -149,7 +212,7 @@ class ControlActivity : AppCompatActivity() {
                 audioStream = null
                 binding.btnAudio.setImageResource(R.drawable.ic_speaker_off)
                 binding.btnAudio.imageTintList = null
-                binding.btnAudio.alpha = 0.6f
+                binding.btnAudio.alpha = 1.0f
                 binding.btnAudio.contentDescription = getString(R.string.cd_audio_off)
                 resetMicUI()
             } else {
@@ -160,7 +223,7 @@ class ControlActivity : AppCompatActivity() {
                         audioStream = null
                         binding.btnAudio.setImageResource(R.drawable.ic_speaker_off)
                         binding.btnAudio.imageTintList = null
-                        binding.btnAudio.alpha = 0.6f
+                        binding.btnAudio.alpha = 1.0f
                         binding.btnAudio.contentDescription = getString(R.string.cd_audio_off)
                         resetMicUI()
                     }
@@ -176,6 +239,19 @@ class ControlActivity : AppCompatActivity() {
         binding.btnMap.setOnClickListener {
             startActivity(Intent(this, MapPopupActivity::class.java))
         }
+
+        // 曝光控制按钮
+        binding.btnExposure.setOnClickListener {
+            toggleExposureMode()
+        }
+
+        // 曝光值点击切换回自动模式
+        binding.tvExposureValue.setOnClickListener {
+            toggleExposureMode()
+        }
+
+        // 后视摄像头按钮
+        binding.btnRearCam.setOnClickListener { toggleRearCam() }
 
         binding.btnMic.setOnTouchListener { _, event ->
             when (event.action) {
@@ -220,6 +296,7 @@ class ControlActivity : AppCompatActivity() {
                 controlClient.stop()
                 audioStream?.disconnect()
                 audioStream = null
+                stopRearCam()
                 resetMicUI()
                 stopControlLoop()
                 isConnected = false
@@ -227,6 +304,7 @@ class ControlActivity : AppCompatActivity() {
         })
 
         // Initial status
+        if (rearCamPort == 0) binding.btnRearCam.isEnabled = false
         binding.tvStatus.text = "连接: --"
         binding.tvResolution.text = "分辨率: --"
         binding.tvFps.text = "帧率: --"
@@ -234,12 +312,13 @@ class ControlActivity : AppCompatActivity() {
         binding.tvTraffic.text = "流量: --"
         binding.tvSignal.text = "信号: --"
         binding.tvVoltage.text = "电压: --"
+        binding.tvSsh.text = "SSH: $sshPort"
     }
 
     private fun connectAll() {
         val holder = binding.surfaceView.holder
         videoManager.connect(serverHost, isHd, holder.surface, video0Port, video1Port)
-        controlClient.connect(serverHost, controlPort)
+        controlClient.connect(serverHost, controlPort, motorMode, lightMode)
         isConnected = true
         updateConnectButton()
         startControlLoop()
@@ -247,12 +326,13 @@ class ControlActivity : AppCompatActivity() {
 
     private fun disconnectAll() {
         stopRecording()
+        stopRearCam()
         audioStream?.disconnect()
         audioStream = null
         resetMicUI()
         binding.btnAudio.setImageResource(R.drawable.ic_speaker_off)
         binding.btnAudio.imageTintList = null
-        binding.btnAudio.alpha = 0.6f
+        binding.btnAudio.alpha = 1.0f
         binding.btnAudio.contentDescription = getString(R.string.cd_audio_off)
         videoManager.disconnect()
         controlClient.disconnect()
@@ -361,7 +441,11 @@ class ControlActivity : AppCompatActivity() {
     }
 
     private fun updateVideoConnection(connected: Boolean) {
-        binding.tvStatus.text = if (connected) "连接: 已连接" else "连接: 未连接"
+        binding.tvStatus.text = when {
+            connected -> "连接: 已连接"
+            isConnected -> "连接: 重连中..."
+            else -> "连接: 未连接"
+        }
     }
 
     private fun updateControlConnection(connected: Boolean) {
@@ -383,17 +467,19 @@ class ControlActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         stopRecording()
+        stopRearCam()
         recordTimer.cancel()
         videoManager.stop()
         controlClient.stop()
         audioStream?.disconnect()
+        exposureClient?.disconnect()
         controlJob?.cancel()
     }
 
     private fun resetMicUI() {
         binding.btnMic.setImageResource(R.drawable.ic_mic_off)
         binding.btnMic.imageTintList = null
-        binding.btnMic.alpha = 0.6f
+        binding.btnMic.alpha = 1.0f
         binding.btnMic.contentDescription = getString(R.string.cd_mic_off)
     }
 
@@ -405,6 +491,149 @@ class ControlActivity : AppCompatActivity() {
             && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             hasMicPermission = true
         }
+    }
+
+    /**
+     * 切换曝光模式（自动/手动）
+     */
+    private fun toggleExposureMode() {
+        if (isManualExposure) {
+            // 切换为自动
+            isManualExposure = false
+            exposureClient?.disconnect()
+            exposureClient = null
+            exposureClient = ExposureClient(
+                onDisconnected = {
+                    runOnUiThread {
+                        isManualExposure = false
+                        binding.btnExposure.isEnabled = true
+                        binding.btnExposure.visibility = View.VISIBLE
+                        binding.tvExposureValue.visibility = View.GONE
+                    }
+                },
+                onConnected = { success ->
+                    runOnUiThread {
+                        binding.btnExposure.isEnabled = true
+                        if (success) {
+                            isManualExposure = true
+                            binding.btnExposure.visibility = View.GONE
+                            binding.tvExposureValue.visibility = View.VISIBLE
+                            binding.tvExposureValue.text = exposureValues[exposureIndex]
+                            exposureClient?.startSending(lifecycleScope)
+                            exposureClient?.setExposure(exposureValues[exposureIndex])
+                        } else {
+                            android.widget.Toast.makeText(this, "曝光控制连接失败", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            )
+            binding.btnExposure.visibility = View.VISIBLE
+            binding.tvExposureValue.visibility = View.GONE
+        } else {
+            // 切换为手动，先禁用按钮
+            binding.btnExposure.isEnabled = false
+            exposureIndex = 3 // 重置为 1/200
+            
+            // 在 IO 线程中连接
+            lifecycleScope.launch(Dispatchers.IO) {
+                exposureClient?.connect(serverHost, videoCtrlPort)
+            }
+        }
+    }
+
+    /**
+     * 切换后视摄像头开关
+     */
+    private fun toggleRearCam() {
+        if (rearCamPort == 0) {
+            android.widget.Toast.makeText(this, "后视摄像头不可用", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (isRearCamOn) {
+            stopRearCam()
+        } else {
+            binding.rearCamContainer.visibility = View.VISIBLE
+            binding.surfaceViewRearCam.holder.addCallback(object : SurfaceHolder.Callback {
+                override fun surfaceCreated(holder: SurfaceHolder) {
+                    val stream = RearCamStream(
+                        onConnectionChanged = { /* 可扩展：更新后视连接状态 */ }
+                    )
+                    rearCamStream = stream
+                    stream.connect(serverHost, rearCamPort, holder.surface)
+                }
+                override fun surfaceChanged(holder: SurfaceHolder, fmt: Int, w: Int, h: Int) {}
+                override fun surfaceDestroyed(holder: SurfaceHolder) {
+                    rearCamStream?.stop()
+                    rearCamStream = null
+                }
+            })
+            // 如果 surface 已创建，手动触发
+            if (binding.surfaceViewRearCam.holder.surface.isValid) {
+                val stream = RearCamStream(
+                    onConnectionChanged = { /* 可扩展 */ }
+                )
+                rearCamStream = stream
+                stream.connect(serverHost, rearCamPort, binding.surfaceViewRearCam.holder.surface)
+            }
+            binding.btnRearCam.setTextColor(0xFF4CAF50.toInt())
+            isRearCamOn = true
+        }
+    }
+
+    private fun stopRearCam() {
+        if (!isRearCamOn) return
+        rearCamStream?.stop()
+        rearCamStream = null
+        binding.rearCamContainer.visibility = View.GONE
+        binding.btnRearCam.setTextColor(getColor(R.color.status_text))
+        isRearCamOn = false
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        // 只在手动曝光模式下处理滑动
+        if (!isManualExposure) return super.onTouchEvent(event)
+
+        val x = event.x
+        val y = event.y
+        val width = resources.displayMetrics.widthPixels.toFloat()
+        val height = resources.displayMetrics.heightPixels.toFloat()
+
+        // 排除摇杆和按钮区域
+        val leftJoystickArea = x < 200 && y > height - 200
+        val rightJoystickArea = x > width - 200 && y > height - 200
+        val rightButtonArea = x > width - 250 && y < 200
+        val bottomButtonArea = y > height - 100 && x > width * 0.3 && x < width * 0.7
+
+        if (leftJoystickArea || rightJoystickArea || rightButtonArea || bottomButtonArea) {
+            return super.onTouchEvent(event)
+        }
+
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                lastTouchY = y
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val deltaY = lastTouchY - y
+                if (Math.abs(deltaY) > 30) { // 灵敏度阈值
+                    if (deltaY > 0) {
+                        // 向上滑动，减小分母（增加曝光）
+                        exposureIndex = (exposureIndex - 1).coerceIn(0, exposureValues.size - 1)
+                    } else {
+                        // 向下滑动，增大分母（减少曝光）
+                        exposureIndex = (exposureIndex + 1).coerceIn(0, exposureValues.size - 1)
+                    }
+                    lastTouchY = y
+                    exposureClient?.setExposure(exposureValues[exposureIndex])
+                    binding.tvExposureValue.text = exposureValues[exposureIndex]
+                }
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                return true
+            }
+        }
+        return super.onTouchEvent(event)
     }
 
     override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {

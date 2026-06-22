@@ -1,6 +1,8 @@
 package com.example.remotecontrolcar
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +14,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.MapsInitializer
@@ -20,17 +24,20 @@ import com.amap.api.maps.model.BitmapDescriptorFactory
 import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
+import com.amap.api.maps.model.MyLocationStyle
+import com.amap.api.maps.CoordinateConverter
 
 class MapPopupActivity : AppCompatActivity() {
 
     companion object {
         @Volatile var latestLat: Double = 0.0
         @Volatile var latestLng: Double = 0.0
-        @Volatile var latestSpeed: Float = 0f
+        @Volatile var latestSpeed: Int = 0
         @Volatile var hasGpsData: Boolean = false
 
         private const val PREF_NAME = "rc_car_prefs"
         private const val KEY_AMAP_API_KEY = "amap_api_key"
+        private const val LOCATION_PERMISSION_REQUEST = 1001
 
         fun getApiKey(context: Context): String {
             return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -145,7 +152,45 @@ class MapPopupActivity : AppCompatActivity() {
             aMap = mv.map
         }
 
+        enableMyLocation()
         handler.postDelayed(updateRunnable, 500)
+    }
+
+    private fun enableMyLocation() {
+        val map = aMap ?: return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            setupMyLocationLayer(map)
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                LOCATION_PERMISSION_REQUEST
+            )
+        }
+    }
+
+    private fun setupMyLocationLayer(map: AMap) {
+        map.isMyLocationEnabled = true
+        map.uiSettings.isMyLocationButtonEnabled = true
+        val style = MyLocationStyle().apply {
+            myLocationType(MyLocationStyle.LOCATION_TYPE_SHOW)
+            showMyLocation(true)
+        }
+        map.myLocationStyle = style
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == LOCATION_PERMISSION_REQUEST
+            && grantResults.isNotEmpty()
+            && grantResults[0] == PackageManager.PERMISSION_GRANTED
+        ) {
+            aMap?.let { setupMyLocationLayer(it) }
+        }
     }
 
     private fun updateMapPosition() {
@@ -159,36 +204,42 @@ class MapPopupActivity : AppCompatActivity() {
             return
         }
 
+        // Convert WGS-84 (GPS) to GCJ-02 (AMap)
+        val wgs84LatLng = LatLng(lat, lng)
+        val converter = CoordinateConverter(this)
+            .from(CoordinateConverter.CoordType.GPS)
+            .coord(wgs84LatLng)
+        val gcj02LatLng = converter.convert()
+
         if (lat != lastLat || lng != lastLng) {
             lastLat = lat
             lastLng = lng
-            val latLng = LatLng(lat, lng)
 
             if (carMarker == null) {
                 carMarker = map.addMarker(
                     MarkerOptions()
-                        .position(latLng)
+                        .position(gcj02LatLng)
                         .title("遥控车")
                         .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
                         .anchor(0.5f, 1.0f)
                 )
             } else {
-                carMarker?.position = latLng
+                carMarker?.position = gcj02LatLng
             }
 
             if (firstLocation) {
                 firstLocation = false
-                map.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 16f))
+                map.moveCamera(CameraUpdateFactory.newLatLngZoom(gcj02LatLng, 16f))
             }
         }
 
         // Update info text
         val tvGpsInfo = findViewById<TextView>(R.id.tvGpsInfo)
-        tvGpsInfo?.text = "%.4f, %.4f".format(latestLat, latestLng)
+        tvGpsInfo?.text = "%.4f, %.4f".format(lat, lng)
 
         // Update speed
         val tvSpeed = findViewById<TextView>(R.id.tvSpeed)
-        tvSpeed?.text = "%.1f km/h".format(latestSpeed)
+        tvSpeed?.text = "$latestSpeed km/h"
     }
 
     override fun onResume() {

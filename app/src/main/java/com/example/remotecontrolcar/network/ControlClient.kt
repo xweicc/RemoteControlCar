@@ -5,12 +5,10 @@ import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 class ControlClient(
     private val onTelemetry: (signal: Int, voltageMv: Int) -> Unit,
-    private val onGps: (lat: Double, lng: Double, speed: Float) -> Unit = { _, _, _ -> },
+    private val onGps: (lat: Double, lng: Double, speed: Int) -> Unit = { _, _, _ -> },
     private val onConnectionChanged: (Boolean) -> Unit
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -20,6 +18,8 @@ class ControlClient(
         private set
     private var host = ""
     private var port = 0
+    private var motorMode = 0
+    private var lightMode = 0
     private val recvBuffer = ByteArrayOutputStream()
 
     companion object {
@@ -28,9 +28,11 @@ class ControlClient(
         private const val TYPE_CONTROL = 0x01
         private const val TYPE_TELEMETRY = 0x02
         private const val TYPE_GPS = 0x03
+        private const val TYPE_CONFIG = 0x04
         private const val CONTROL_PACKET_SIZE = 10
         private const val TELEMETRY_PACKET_SIZE = 11
-        private const val GPS_PACKET_SIZE = 25
+        private const val GPS_PACKET_SIZE = 30
+        private const val CONFIG_PACKET_SIZE = 6
     }
 
     fun start(host: String) {
@@ -65,9 +67,11 @@ class ControlClient(
         scope.launch { connectAndRead() }
     }
 
-    fun connect(host: String, port: Int) {
+    fun connect(host: String, port: Int, motorMode: Int = 0, lightMode: Int = 0) {
         this.host = host
         this.port = port
+        this.motorMode = motorMode
+        this.lightMode = lightMode
         this.isRunning = true
         scope.launch { connectAndRead() }
     }
@@ -89,6 +93,9 @@ class ControlClient(
                 sock.connect(InetSocketAddress(host, port), 5000)
                 socket = sock
                 outputStream = sock.getOutputStream()
+                // 连接成功后先发送配置包
+                sock.getOutputStream().write(encodeConfig(motorMode, lightMode))
+                sock.getOutputStream().flush()
                 withContext(Dispatchers.Main) { onConnectionChanged(true) }
                 val input = sock.getInputStream()
                 val buf = ByteArray(256)
@@ -135,10 +142,11 @@ class ControlClient(
                 }
                 TYPE_GPS -> {
                     if (packetLen >= GPS_PACKET_SIZE) {
-                        val bb = ByteBuffer.wrap(buf, i + 4, 20).order(ByteOrder.LITTLE_ENDIAN)
-                        val lat = bb.double  // 8 bytes
-                        val lng = bb.double  // 8 bytes
-                        val speed = bb.float // 4 bytes
+                        val latStr = String(buf, i + 4, 12, Charsets.US_ASCII).trimEnd('\u0000')
+                        val lngStr = String(buf, i + 16, 12, Charsets.US_ASCII).trimEnd('\u0000')
+                        val speed = buf[i + 28].toInt() and 0xFF
+                        val lat = latStr.toDoubleOrNull() ?: 0.0
+                        val lng = lngStr.toDoubleOrNull() ?: 0.0
                         onGps(lat, lng, speed)
                     }
                 }
@@ -170,6 +178,28 @@ class ControlClient(
         var cs: Byte = 0
         for (j in 0..8) cs = (cs.toInt() xor p[j].toInt()).toByte()
         p[9] = cs
+        return p
+    }
+
+    /**
+     * Config packet (C-struct compatible, packed):
+     *   uint8_t  magic[2]      = {0x5A, 0xA5}
+     *   uint8_t  type          = 0x04
+     *   uint8_t  length        = 6
+     *   uint8_t  motor_mode    (0=内置电调, 1=外部电调)
+     *   uint8_t  light_mode    (0=内置控制, 1=外部控制)
+     *   uint8_t  checksum      (XOR of all preceding bytes)
+     */
+    private fun encodeConfig(motorMode: Int, lightMode: Int): ByteArray {
+        val p = ByteArray(CONFIG_PACKET_SIZE)
+        p[0] = MAGIC_0.toByte(); p[1] = MAGIC_1.toByte()
+        p[2] = TYPE_CONFIG.toByte()
+        p[3] = CONFIG_PACKET_SIZE.toByte()
+        p[4] = motorMode.toByte()
+        p[5] = lightMode.toByte()
+        var cs: Byte = 0
+        for (j in 0 until CONFIG_PACKET_SIZE - 1) cs = (cs.toInt() xor p[j].toInt()).toByte()
+        p[CONFIG_PACKET_SIZE - 1] = cs
         return p
     }
 

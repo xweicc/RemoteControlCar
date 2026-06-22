@@ -9,10 +9,10 @@
     <string name="quality_smooth">流畅</string>
     <string name="btn_disconnect">断开</string>
     <string name="btn_connect">连接</string>
-    <string name="light_off">灯:关</string>
-    <string name="light_low">灯:弱</string>
-    <string name="light_mid">灯:中</string>
-    <string name="light_high">灯:强</string>
+    <string name="light_off">车灯:关</string>
+    <string name="light_low">车灯:弱</string>
+    <string name="light_mid">车灯:中</string>
+    <string name="light_high">车灯:强</string>
     <string name="btn_record_start">录像</string>
     <string name="btn_record_stop">停止</string>
     <string name="hint_sn">设备序列号</string>
@@ -23,4 +23,11 @@
     <string name="cd_map">定位地图</string>
     <string name="map_title">遥控车定位</string>
     <string name="map_close">关闭地图</string>
+    <string name="label_motor_mode">电机模式</string>
+    <string name="motor_builtin">内置电调</string>
+    <string name="motor_external">PWM输出</string>
+    <string name="label_light_mode">车灯模式</string>
+    <string name="light_builtin">NMOS驱动</string>
+    <string name="light_external">PWM输出</string>
+    <string name="btn_rear_cam">后视</string>
 </resources>

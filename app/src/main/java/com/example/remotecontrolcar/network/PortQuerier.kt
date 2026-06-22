@@ -6,7 +6,10 @@ data class DevicePorts(
     val video0: Int,
     val video1: Int,
     val audio: Int,
-    val control: Int
+    val control: Int,
+    val videoCtrl: Int,
+    val ssh: Int,
+    val rearCam: Int
 )
 
 object PortQuerier {
@@ -33,12 +36,15 @@ object PortQuerier {
                 when {
                     response.startsWith("OK ") -> {
                         val parts = response.substring(3).split(",")
-                        if (parts.size == 4) {
+                        if (parts.size >= 7) {
                             DevicePorts(
-                                video0  = parts[0].trim().toInt(),
-                                video1  = parts[1].trim().toInt(),
-                                audio   = parts[2].trim().toInt(),
-                                control = parts[3].trim().toInt()
+                                video0    = parts[0].trim().toInt(),
+                                video1    = parts[1].trim().toInt(),
+                                audio     = parts[2].trim().toInt(),
+                                control   = parts[3].trim().toInt(),
+                                videoCtrl = parts[4].trim().toInt(),
+                                ssh       = parts[5].trim().toInt(),
+                                rearCam   = parts[6].trim().toInt()
                             )
                         } else null
                     }

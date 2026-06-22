@@ -46,11 +46,11 @@ class JoystickView @JvmOverloads constructor(
     private var trackingPointerId = -1
 
     private val basePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(80, 255, 255, 255)
+        color = Color.argb(51, 255, 255, 255)
         style = Paint.Style.FILL
     }
     private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(180, 255, 255, 255)
+        color = Color.argb(128, 255, 255, 255)
         style = Paint.Style.FILL
     }
     private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

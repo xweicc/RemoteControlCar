@@ -10,7 +10,7 @@
     <color name="bg_main">#FFF5F5F5</color>
     <color name="text_primary">#FF333333</color>
     <color name="accent">#FF2196F3</color>
-    <color name="overlay_bg">#B3000000</color>
-    <color name="btn_overlay">#80000000</color>
+    <color name="overlay_bg">#33000000</color>
+    <color name="btn_overlay">#33000000</color>
     <color name="status_text">#FFFFFFFF</color>
 </resources>
