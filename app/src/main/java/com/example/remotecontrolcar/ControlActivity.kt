@@ -52,11 +52,13 @@ class ControlActivity : AppCompatActivity() {
     private var rearCamPort = 0
     private var motorMode = 0
     private var lightMode = 0
+    private var useUdp = false
     private var audioStream: AudioStream? = null
     private var hasMicPermission = false
     private var lightLevel = 0
     private var throttle = 512
     private var steering = 512
+    private var steeringTrim = 0  // 转向微调 -100~+100
     private var controlJob: Job? = null
     private var recordStartTime = 0L
     private val recordTimer = java.util.Timer()
@@ -65,6 +67,10 @@ class ControlActivity : AppCompatActivity() {
     // 后视摄像头
     private var rearCamStream: RearCamStream? = null
     private var isRearCamOn = false
+
+    private var controlConnected = false
+    private var latencyMs = -1
+    private var noResponse = false
 
     // 曝光控制
     private var exposureClient: ExposureClient? = null
@@ -105,6 +111,7 @@ class ControlActivity : AppCompatActivity() {
         rearCamPort = intent.getIntExtra("rearCamPort", 0)
         motorMode = intent.getIntExtra("motorMode", 0)
         lightMode = intent.getIntExtra("lightMode", 0)
+        useUdp = intent.getBooleanExtra("useUdp", false)
         binding.btnQuality.text = if (isHd) getString(R.string.quality_hd) else getString(R.string.quality_smooth)
 
         // Video stream manager
@@ -132,6 +139,12 @@ class ControlActivity : AppCompatActivity() {
                     span.setSpan(RelativeSizeSpan(0.5f), unitStart, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                     binding.tvGpsSpeed.text = span
                 }
+            },
+            onLatency = { ms ->
+                runOnUiThread { updateLatency(ms) }
+            },
+            onNoResponse = {
+                runOnUiThread { updateNoResponse() }
             },
             onConnectionChanged = { connected ->
                 runOnUiThread { updateControlConnection(connected) }
@@ -306,6 +319,7 @@ class ControlActivity : AppCompatActivity() {
         // Initial status
         if (rearCamPort == 0) binding.btnRearCam.isEnabled = false
         binding.tvStatus.text = "连接: --"
+        binding.tvLatency.text = "延迟: --"
         binding.tvResolution.text = "分辨率: --"
         binding.tvFps.text = "帧率: --"
         binding.tvBitrate.text = "码率: --"
@@ -313,12 +327,31 @@ class ControlActivity : AppCompatActivity() {
         binding.tvSignal.text = "信号: --"
         binding.tvVoltage.text = "电压: --"
         binding.tvSsh.text = "SSH: $sshPort"
+
+        // 转向微调
+        val prefs = getSharedPreferences("config", MODE_PRIVATE)
+        steeringTrim = prefs.getInt("steeringTrim", 0)
+        updateTrimDisplay()
+        binding.btnTrimLeft.setOnClickListener {
+            steeringTrim = (steeringTrim - 5).coerceAtLeast(-100)
+            prefs.edit().putInt("steeringTrim", steeringTrim).apply()
+            updateTrimDisplay()
+        }
+        binding.btnTrimRight.setOnClickListener {
+            steeringTrim = (steeringTrim + 5).coerceAtMost(100)
+            prefs.edit().putInt("steeringTrim", steeringTrim).apply()
+            updateTrimDisplay()
+        }
+    }
+
+    private fun updateTrimDisplay() {
+        binding.tvTrimValue.text = if (steeringTrim > 0) "+$steeringTrim" else "$steeringTrim"
     }
 
     private fun connectAll() {
         val holder = binding.surfaceView.holder
         videoManager.connect(serverHost, isHd, holder.surface, video0Port, video1Port)
-        controlClient.connect(serverHost, controlPort, motorMode, lightMode)
+        controlClient.connect(serverHost, controlPort, motorMode, lightMode, useUdp)
         isConnected = true
         updateConnectButton()
         startControlLoop()
@@ -345,7 +378,8 @@ class ControlActivity : AppCompatActivity() {
         controlJob?.cancel()
         controlJob = lifecycleScope.launch(Dispatchers.IO) {
             while (isActive) {
-                controlClient.sendControl(throttle, steering, lightLevel)
+                val adjustedSteering = (steering + steeringTrim).coerceIn(0, 1024)
+                controlClient.sendControl(throttle, adjustedSteering, lightLevel)
                 delay(20)
             }
         }
@@ -441,6 +475,12 @@ class ControlActivity : AppCompatActivity() {
     }
 
     private fun updateVideoConnection(connected: Boolean) {
+        // 状态面板显示控制通道状态，视频连接状态不在此显示
+    }
+
+    private fun updateControlConnection(connected: Boolean) {
+        controlConnected = connected
+        noResponse = false
         binding.tvStatus.text = when {
             connected -> "连接: 已连接"
             isConnected -> "连接: 重连中..."
@@ -448,13 +488,24 @@ class ControlActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateControlConnection(connected: Boolean) {
-        // Control connection status reflected in main status
-    }
-
     private fun updateTelemetry(signal: Int, voltageMv: Int) {
         binding.tvSignal.text = "信号: $signal dBm"
         binding.tvVoltage.text = "电压: ${"%.2f".format(voltageMv / 1000.0)}V"
+    }
+
+    private fun updateLatency(ms: Int) {
+        latencyMs = ms
+        binding.tvLatency.text = "延迟: ${ms}ms"
+        // 收到延迟说明有响应，重置无响应状态
+        if (noResponse) {
+            noResponse = false
+            binding.tvStatus.text = "连接: 已连接"
+        }
+    }
+
+    private fun updateNoResponse() {
+        noResponse = true
+        binding.tvStatus.text = "连接: 无响应"
     }
 
     private fun formatBytes(bytes: Long): String = when {

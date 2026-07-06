@@ -3,24 +3,35 @@ package com.example.remotecontrolcar.network
 import kotlinx.coroutines.*
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
+import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.InetSocketAddress
 import java.net.Socket
 
 class ControlClient(
     private val onTelemetry: (signal: Int, voltageMv: Int) -> Unit,
     private val onGps: (lat: Double, lng: Double, speed: Int) -> Unit = { _, _, _ -> },
+    private val onLatency: (Int) -> Unit = { _ -> },
+    private val onNoResponse: () -> Unit = {},
     private val onConnectionChanged: (Boolean) -> Unit
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var socket: Socket? = null
     @Volatile private var outputStream: OutputStream? = null
+    @Volatile private var udpSocket: DatagramSocket? = null
     @Volatile var isRunning = false
         private set
     private var host = ""
     private var port = 0
     private var motorMode = 0
     private var lightMode = 0
+    private var useUdp = false
     private val recvBuffer = ByteArrayOutputStream()
+    @Volatile private var sentTm: Long = 0
+    @Volatile private var lastTmSendTime: Long = 0
+    private var baseTimeMs: Long = 0
+    @Volatile private var lastResponseTime: Long = 0
+    @Volatile private var noResponseTriggered: Boolean = false
 
     companion object {
         private const val MAGIC_0 = 0x5A
@@ -29,8 +40,8 @@ class ControlClient(
         private const val TYPE_TELEMETRY = 0x02
         private const val TYPE_GPS = 0x03
         private const val TYPE_CONFIG = 0x04
-        private const val CONTROL_PACKET_SIZE = 10
-        private const val TELEMETRY_PACKET_SIZE = 11
+        private const val CONTROL_PACKET_SIZE = 14
+        private const val TELEMETRY_PACKET_SIZE = 15
         private const val GPS_PACKET_SIZE = 30
         private const val CONFIG_PACKET_SIZE = 6
     }
@@ -67,21 +78,48 @@ class ControlClient(
         scope.launch { connectAndRead() }
     }
 
-    fun connect(host: String, port: Int, motorMode: Int = 0, lightMode: Int = 0) {
+    fun connect(host: String, port: Int, motorMode: Int = 0, lightMode: Int = 0, useUdp: Boolean = false) {
         this.host = host
         this.port = port
         this.motorMode = motorMode
         this.lightMode = lightMode
+        this.useUdp = useUdp
+        this.baseTimeMs = System.currentTimeMillis()
+        this.lastResponseTime = this.baseTimeMs
+        this.noResponseTriggered = false
         this.isRunning = true
-        scope.launch { connectAndRead() }
+        if (useUdp) {
+            scope.launch { udpLoop() }
+        } else {
+            scope.launch { connectAndRead() }
+        }
     }
 
     fun sendControl(throttle: Int, steering: Int, light: Int) {
-        val os = outputStream
-        if (os == null) return
         try {
-            os.write(encodeControl(throttle, steering, light))
-            os.flush()
+            // 每秒发送一次 tm（相对时间，32位）
+            val now = System.currentTimeMillis()
+            val tm = if (now - lastTmSendTime >= 1000) {
+                lastTmSendTime = now
+                val relativeTm = (now - baseTimeMs) and 0xFFFFFFFFL
+                sentTm = relativeTm
+                // UDP 模式：检查是否超过3秒未收到响应
+                if (useUdp && now - lastResponseTime >= 3000 && !noResponseTriggered) {
+                    noResponseTriggered = true
+                    onNoResponse()
+                }
+                relativeTm
+            } else 0L
+            val packet = encodeControl(throttle, steering, light, tm)
+            if (useUdp) {
+                val ds = udpSocket ?: return
+                val dp = DatagramPacket(packet, packet.size, java.net.InetAddress.getByName(host), port)
+                ds.send(dp)
+            } else {
+                val os = outputStream ?: return
+                os.write(packet)
+                os.flush()
+            }
         } catch (_: Exception) {}
     }
 
@@ -129,6 +167,9 @@ class ControlClient(
             var checksum: Byte = 0
             for (j in 0 until packetLen - 1) checksum = (checksum.toInt() xor buf[i + j].toInt()).toByte()
             if (checksum != buf[i + packetLen - 1]) { i++; continue }
+            // 收到有效响应，重置无响应计时器
+            lastResponseTime = System.currentTimeMillis()
+            noResponseTriggered = false
             when (type) {
                 TYPE_TELEMETRY -> {
                     if (packetLen >= TELEMETRY_PACKET_SIZE) {
@@ -137,7 +178,17 @@ class ControlClient(
                                 ((buf[i + 7].toInt() and 0xFF) shl 8) or
                                 ((buf[i + 8].toInt() and 0xFF) shl 16) or
                                 ((buf[i + 9].toInt() and 0xFF) shl 24)
+                        val tm = (buf[i + 10].toLong() and 0xFF) or
+                                ((buf[i + 11].toLong() and 0xFF) shl 8) or
+                                ((buf[i + 12].toLong() and 0xFF) shl 16) or
+                                ((buf[i + 13].toLong() and 0xFF) shl 24)
                         onTelemetry(signal.toInt(), voltageMv)
+                        // 计算延迟
+                        if (tm != 0L && sentTm != 0L && tm == sentTm) {
+                            val sentAbsolute = baseTimeMs + tm
+                            val rtt = System.currentTimeMillis() - sentAbsolute
+                            onLatency((rtt / 2).toInt())
+                        }
                     }
                 }
                 TYPE_GPS -> {
@@ -161,13 +212,14 @@ class ControlClient(
      * Control packet (C-struct compatible, packed):
      *   uint8_t  magic[2]   = {0x5A, 0xA5}
      *   uint8_t  type       = 0x01
-     *   uint8_t  length     = 10
+     *   uint8_t  length     = 14
      *   uint16_t throttle   (LE, 0-1024, 512=stop)
      *   uint16_t steering   (LE, 0-1024, 512=center)
      *   uint8_t  light      (0=off,1=low,2=mid,3=high)
+     *   uint32_t tm         (LE, ms timestamp, 0=no latency probe)
      *   uint8_t  checksum   (XOR of all preceding bytes)
      */
-    private fun encodeControl(throttle: Int, steering: Int, light: Int): ByteArray {
+    private fun encodeControl(throttle: Int, steering: Int, light: Int, tm: Long): ByteArray {
         val p = ByteArray(CONTROL_PACKET_SIZE)
         p[0] = MAGIC_0.toByte(); p[1] = MAGIC_1.toByte()
         p[2] = TYPE_CONTROL.toByte()
@@ -175,9 +227,13 @@ class ControlClient(
         p[4] = (throttle and 0xFF).toByte(); p[5] = ((throttle shr 8) and 0xFF).toByte()
         p[6] = (steering and 0xFF).toByte(); p[7] = ((steering shr 8) and 0xFF).toByte()
         p[8] = light.toByte()
+        p[9] = (tm and 0xFF).toByte()
+        p[10] = ((tm shr 8) and 0xFF).toByte()
+        p[11] = ((tm shr 16) and 0xFF).toByte()
+        p[12] = ((tm shr 24) and 0xFF).toByte()
         var cs: Byte = 0
-        for (j in 0..8) cs = (cs.toInt() xor p[j].toInt()).toByte()
-        p[9] = cs
+        for (j in 0..12) cs = (cs.toInt() xor p[j].toInt()).toByte()
+        p[13] = cs
         return p
     }
 
@@ -206,5 +262,42 @@ class ControlClient(
     private fun close() {
         try { socket?.close() } catch (_: Exception) {}
         socket = null; outputStream = null
+        try { udpSocket?.close() } catch (_: Exception) {}
+        udpSocket = null
+    }
+
+    /**
+     * UDP 模式：发送控制包 + 接收遥测/GPS 响应
+     */
+    private suspend fun udpLoop() {
+        while (scope.isActive && isRunning) {
+            try {
+                val ds = DatagramSocket()
+                ds.soTimeout = 3000
+                udpSocket = ds
+                // 发送配置包
+                val configPacket = encodeConfig(motorMode, lightMode)
+                val configDp = DatagramPacket(configPacket, configPacket.size,
+                    java.net.InetAddress.getByName(host), port)
+                ds.send(configDp)
+                withContext(Dispatchers.Main) { onConnectionChanged(true) }
+                val buf = ByteArray(256)
+                while (isRunning && !ds.isClosed) {
+                    val packet = DatagramPacket(buf, buf.size)
+                    try {
+                        ds.receive(packet)
+                        recvBuffer.reset()
+                        processReceivedData(packet.data, packet.length)
+                    } catch (_: java.net.SocketTimeoutException) {
+                        // 超时继续，保持循环
+                    }
+                }
+            } catch (_: Exception) {
+            } finally {
+                close()
+                withContext(Dispatchers.Main) { onConnectionChanged(false) }
+            }
+            if (isRunning) delay(2000)
+        }
     }
 }

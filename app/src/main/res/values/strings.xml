@@ -30,4 +30,7 @@
     <string name="light_builtin">NMOS驱动</string>
     <string name="light_external">PWM输出</string>
     <string name="btn_rear_cam">后视</string>
+    <string name="label_control_protocol">控制协议</string>
+    <string name="protocol_tcp">TCP</string>
+    <string name="protocol_udp">UDP</string>
 </resources>

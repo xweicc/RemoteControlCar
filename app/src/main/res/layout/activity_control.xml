@@ -30,6 +30,13 @@
             android:textSize="12sp" />
 
         <TextView
+            android:id="@+id/tvLatency"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp" />
+
+        <TextView
             android:id="@+id/tvResolution"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -201,6 +208,50 @@
         android:layout_gravity="end|bottom"
         android:layout_marginEnd="24dp"
         android:layout_marginBottom="24dp" />
+
+    <!-- Trim control: above right joystick -->
+    <LinearLayout
+        android:id="@+id/trimControl"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="44dp"
+        android:layout_marginBottom="170dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnTrimLeft"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="0dp"
+            android:text="◀"
+            android:textColor="@android:color/white"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvTrimValue"
+            android:layout_width="48dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_status_panel"
+            android:gravity="center"
+            android:text="0"
+            android:textColor="@android:color/white"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnTrimRight"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_control_button"
+            android:padding="0dp"
+            android:text="▶"
+            android:textColor="@android:color/white"
+            android:textSize="14sp" />
+
+    </LinearLayout>
 
     <!-- Bottom center: Audio speaker + mic toggle -->
     <LinearLayout

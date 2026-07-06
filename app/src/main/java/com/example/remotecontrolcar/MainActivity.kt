@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.example.remotecontrolcar.BuildConfig
 import com.example.remotecontrolcar.databinding.ActivityMainBinding
 import com.example.remotecontrolcar.network.PortQuerier
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,14 @@ class MainActivity : AppCompatActivity() {
         } else {
             binding.rgLightMode.check(R.id.rbLightExternal)
         }
+        if (prefs.getBoolean("useUdp", false)) {
+            binding.rgProtocol.check(R.id.rbUdp)
+        } else {
+            binding.rgProtocol.check(R.id.rbTcp)
+        }
+
+        // 显示版本号
+        binding.tvVersion.text = "版本号：V${BuildConfig.VERSION_NAME}"
 
         binding.btnEnterControl.setOnClickListener {
             if (querying) return@setOnClickListener
@@ -70,12 +79,14 @@ class MainActivity : AppCompatActivity() {
             val hd = binding.rbHd.isChecked
             val motorMode = if (binding.rbMotorExternal.isChecked) 1 else 0
             val lightMode = if (binding.rbLightExternal.isChecked) 1 else 0
+            val useUdp = binding.rbUdp.isChecked
             prefs.edit()
                 .putString("server", addressInput)
                 .putString("sn", sn)
                 .putBoolean("hd", hd)
                 .putInt("motorMode", motorMode)
                 .putInt("lightMode", lightMode)
+                .putBoolean("useUdp", useUdp)
                 .apply()
 
             // 在首页查询端口
@@ -113,6 +124,7 @@ class MainActivity : AppCompatActivity() {
                         .putExtra("rearCamPort", ports.rearCam)
                         .putExtra("motorMode", motorMode)
                         .putExtra("lightMode", lightMode)
+                        .putExtra("useUdp", useUdp)
                 )
             }
         }
