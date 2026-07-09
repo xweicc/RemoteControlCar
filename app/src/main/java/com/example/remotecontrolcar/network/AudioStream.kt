@@ -15,21 +15,73 @@ import java.net.Socket
 /**
  * 音频流管理器：单个 TCP 连接实现双向音频对讲
  *
- * - 接收：服务端 → raw PCM 字节流 → AudioTrack 播放
- * - 发送：AudioRecord 录音 → raw PCM 字节流 → 服务端
+ * - 接收：服务端 → G.711a 字节流 → 解码为 PCM → AudioTrack 播放
+ * - 发送：AudioRecord 录音 → PCM → 编码为 G.711a → 服务端
  *
- * 采样率 16kHz / 单声道 / 16-bit PCM little-endian
+ * 采样率 16kHz / 单声道 / 16-bit PCM，传输使用 G.711a 压缩（2:1）
  */
 class AudioStream {
 
     companion object {
         private const val SAMPLE_RATE = 16000
+
+        /** G.711a 解码（与服务端 alaw_to_pcm 一致） */
+        private fun decodeAlawSample(aVal: Int): Short {
+            val sign = if ((aVal and 0x80) != 0) 0x80 else 0  // 先提取原始符号位
+            var v = aVal xor 0x55                              // 再 XOR 还原
+            v = v and 0x7F
+            val seg = (v shr 4) and 0x07
+            val mantissa = v and 0x0F
+            val pcm = if (seg == 0) {
+                (mantissa shl 4) + 8
+            } else {
+                ((mantissa shl 4) + 0x108) shl (seg - 1)
+            }
+            return (if (sign != 0) -pcm else pcm).toShort()
+        }
+
+        /** G.711a 解码：alaw 字节 → PCM short 数组 */
+        private fun decodeAlaw(alaw: ByteArray, pcm: ShortArray, count: Int) {
+            for (i in 0 until count) {
+                pcm[i] = decodeAlawSample(alaw[i].toInt() and 0xFF)
+            }
+        }
+
+        /** G.711a 编码：单个 16-bit linear PCM sample → 8-bit A-law */
+        private fun encodeAlawSample(sample: Int): Byte {
+            var pcm = sample
+            val sign = (pcm and 0x8000) shr 8
+            if (sign != 0) pcm = -pcm
+            if (pcm > 32635) pcm = 32635
+            var exponent = 7
+            var mask = 0x4000
+            while (exponent > 0 && (pcm and mask) == 0) {
+                exponent--
+                mask = mask shr 1
+            }
+            val alaw = if (exponent == 0) {
+                (pcm shr 4) and 0x0F
+            } else {
+                ((pcm shr (exponent + 3)) and 0x0F) or (exponent shl 4)
+            }
+            return ((alaw xor (sign or 0x55))).toByte()
+        }
+
+        /** G.711a 编码：PCM short 数组 → alaw 字节数组 */
+        private fun encodeAlaw(pcm: ShortArray, alaw: ByteArray, count: Int) {
+            for (i in 0 until count) {
+                alaw[i] = encodeAlawSample(pcm[i].toInt())
+            }
+        }
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var socket: Socket? = null
     private var audioTrack: AudioTrack? = null
     private var recorder: AudioRecord? = null
+
+    /** G.711a 编码开关，false 时使用 raw PCM */
+    var useG711a = true
 
     @Volatile
     var isRunning = false
@@ -120,15 +172,31 @@ class AudioStream {
 
             // 接收协程（当前）：从 socket 读数据放入 Channel
             val input = sock.getInputStream()
-            val pcmBuf = ByteArray(8192)
+            val recvBuf = ByteArray(8192)
             while (isRunning && !sock.isClosed) {
-                val len = input.read(pcmBuf)
+                val len = input.read(recvBuf)
                 if (len < 0) break
-                val aligned = len and 0x7FFFFFFE
-                if (aligned > 0) {
-                    val chunk = ByteArray(aligned)
-                    System.arraycopy(pcmBuf, 0, chunk, 0, aligned)
-                    pcmChannel.send(chunk) // 队列满时挂起，不阻塞 socket 读取
+                if (len > 0) {
+                    if (useG711a) {
+                        // G.711a 解码为 PCM
+                        val pcm = ShortArray(len)
+                        decodeAlaw(recvBuf, pcm, len)
+                        val pcmBytes = ByteArray(len * 2)
+                        for (i in 0 until len) {
+                            val s = pcm[i].toInt()
+                            pcmBytes[i * 2] = s.toByte()
+                            pcmBytes[i * 2 + 1] = (s shr 8).toByte()
+                        }
+                        pcmChannel.send(pcmBytes)
+                    } else {
+                        // raw PCM 直接转发
+                        val aligned = len and 0x7FFFFFFE
+                        if (aligned > 0) {
+                            val chunk = ByteArray(aligned)
+                            System.arraycopy(recvBuf, 0, chunk, 0, aligned)
+                            pcmChannel.send(chunk)
+                        }
+                    }
                 }
             }
 
@@ -197,12 +265,25 @@ class AudioStream {
             }
             rec.startRecording()
 
-            // 发送循环：AudioRecord → raw PCM 16-bit LE
+            // 发送循环
             val pcmBuf = ByteArray(bufSize * 2)
+            val pcmShort = ShortArray(pcmBuf.size / 2)
+            val alawOut = ByteArray(pcmBuf.size / 2)
             while (isMicActive && isRunning) {
                 val read = rec.read(pcmBuf, 0, pcmBuf.size)
                 if (read <= 0) break
-                os.write(pcmBuf, 0, read)
+                if (useG711a) {
+                    // PCM → G.711a 编码 → 发送
+                    val sampleCount = read / 2
+                    for (i in 0 until sampleCount) {
+                        pcmShort[i] = ((pcmBuf[i * 2].toInt() and 0xFF) or (pcmBuf[i * 2 + 1].toInt() shl 8)).toShort()
+                    }
+                    encodeAlaw(pcmShort, alawOut, sampleCount)
+                    os.write(alawOut, 0, sampleCount)
+                } else {
+                    // raw PCM 直接发送
+                    os.write(pcmBuf, 0, read)
+                }
                 os.flush()
             }
         } catch (_: Exception) {
