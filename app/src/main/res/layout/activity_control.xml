@@ -253,7 +253,7 @@
 
     </LinearLayout>
 
-    <!-- Bottom center: Audio speaker + mic toggle -->
+    <!-- Bottom center: Map / Speaker / Mic / Exposure -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -266,9 +266,9 @@
             android:id="@+id/btnMap"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="32dp"
             android:background="@drawable/bg_control_button"
-            android:padding="10dp"
+            android:padding="8dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_map_pin"
             android:contentDescription="@string/cd_map" />
@@ -277,7 +277,7 @@
             android:id="@+id/btnAudio"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="32dp"
             android:background="@drawable/bg_control_button"
             android:padding="8dp"
             android:scaleType="fitCenter"
@@ -286,47 +286,95 @@
 
         <ImageButton
             android:id="@+id/btnMic"
-            android:layout_width="96dp"
+            android:layout_width="48dp"
             android:layout_height="48dp"
+            android:layout_marginEnd="32dp"
             android:background="@drawable/bg_control_button"
             android:padding="8dp"
             android:scaleType="fitCenter"
             android:src="@drawable/ic_mic_off"
             android:contentDescription="@string/cd_mic_off" />
 
+        <!-- Volume button + floating panel above it -->
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="32dp">
+
+            <ImageButton
+                android:id="@+id/btnVolume"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_control_button"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_volume"
+                android:contentDescription="@string/cd_volume" />
+
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="48dp"
+            android:layout_height="48dp">
+
+            <ImageButton
+                android:id="@+id/btnExposure"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_control_button"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_exposure_sun"
+                android:contentDescription="曝光控制" />
+
+            <TextView
+                android:id="@+id/tvExposureValue"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:background="@drawable/bg_control_button"
+                android:textColor="@android:color/white"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </FrameLayout>
+
     </LinearLayout>
 
-    <!-- Right bottom: Exposure control -->
+    <!-- Volume panel: vertical slider, floats above volume button -->
     <FrameLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="end|bottom"
-        android:layout_marginEnd="200dp"
-        android:layout_marginBottom="24dp">
+        android:id="@+id/volumePanel"
+        android:layout_width="56dp"
+        android:layout_height="180dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginBottom="88dp"
+        android:layout_marginEnd="156dp"
+        android:background="@drawable/bg_status_panel"
+        android:visibility="gone">
 
-        <ImageButton
-            android:id="@+id/btnExposure"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="@drawable/bg_control_button"
-            android:padding="8dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_exposure_sun"
-            android:contentDescription="曝光控制" />
+        <SeekBar
+            android:id="@+id/seekVolume"
+            android:layout_width="140dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:max="9"
+            android:progress="9"
+            android:rotation="270" />
 
         <TextView
-            android:id="@+id/tvExposureValue"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:background="@drawable/bg_control_button"
+            android:id="@+id/tvVolumeValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="4dp"
+            android:text="10"
             android:textColor="@android:color/white"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:visibility="gone"
-            android:clickable="true"
-            android:focusable="true" />
+            android:textSize="14sp"
+            android:textStyle="bold" />
 
     </FrameLayout>
 

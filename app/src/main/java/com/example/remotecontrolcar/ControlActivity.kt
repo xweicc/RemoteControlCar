@@ -59,6 +59,8 @@ class ControlActivity : AppCompatActivity() {
     private var throttle = 512
     private var steering = 512
     private var steeringTrim = 0  // 转向微调 -100~+100
+    private var speakerVolume = 10  // 设备扬声器音量档位 1~10
+    private var volumeHideTask: java.util.TimerTask? = null
     private var controlJob: Job? = null
     private var recordStartTime = 0L
     private val recordTimer = java.util.Timer()
@@ -230,6 +232,7 @@ class ControlActivity : AppCompatActivity() {
                 resetMicUI()
             } else {
                 val s = AudioStream()
+                s.sendVolume = speakerVolume
                 audioStream = s
                 s.onDisconnected = {
                     runOnUiThread {
@@ -266,32 +269,26 @@ class ControlActivity : AppCompatActivity() {
         // 后视摄像头按钮
         binding.btnRearCam.setOnClickListener { toggleRearCam() }
 
-        binding.btnMic.setOnTouchListener { _, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    val stream = audioStream
-                    if (stream == null || !stream.isRunning) return@setOnTouchListener true
-                    if (!hasMicPermission) {
-                        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
-                            != PackageManager.PERMISSION_GRANTED) {
-                            requestPermissions(
-                                arrayOf(android.Manifest.permission.RECORD_AUDIO), 200)
-                            return@setOnTouchListener true
-                        }
-                        hasMicPermission = true
-                    }
-                    stream.enableMic()
-                    binding.btnMic.imageTintList = ColorStateList.valueOf(0xFFF44336.toInt())
-                    binding.btnMic.alpha = 1.0f
-                    binding.btnMic.contentDescription = getString(R.string.cd_mic_on)
-                    true
+        binding.btnMic.setOnClickListener {
+            val stream = audioStream
+            if (stream == null || !stream.isRunning) return@setOnClickListener
+            if (!hasMicPermission) {
+                if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(
+                        arrayOf(android.Manifest.permission.RECORD_AUDIO), 200)
+                    return@setOnClickListener
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    audioStream?.disableMic()
-                    resetMicUI()
-                    true
-                }
-                else -> false
+                hasMicPermission = true
+            }
+            if (stream.isMicActive) {
+                stream.disableMic()
+                resetMicUI()
+            } else {
+                stream.enableMic()
+                binding.btnMic.imageTintList = ColorStateList.valueOf(0xFF4CAF50.toInt())
+                binding.btnMic.alpha = 1.0f
+                binding.btnMic.contentDescription = getString(R.string.cd_mic_on)
             }
         }
 
@@ -342,6 +339,40 @@ class ControlActivity : AppCompatActivity() {
             prefs.edit().putInt("steeringTrim", steeringTrim).apply()
             updateTrimDisplay()
         }
+
+        // 扬声器音量 1~10（默认 10 最大），持久化
+        speakerVolume = prefs.getInt("speakerVolume", 10).coerceIn(1, 10)
+        binding.tvVolumeValue.text = speakerVolume.toString()
+        binding.seekVolume.progress = speakerVolume - 1  // SeekBar 0~9 映射 1~10
+        binding.btnVolume.setOnClickListener {
+            binding.volumePanel.visibility =
+                if (binding.volumePanel.visibility == View.VISIBLE) View.GONE
+                else { scheduleVolumeHide(); View.VISIBLE }
+        }
+        binding.seekVolume.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: android.widget.SeekBar, progress: Int, fromUser: Boolean) {
+                speakerVolume = (progress + 1).coerceIn(1, 10)
+                binding.tvVolumeValue.text = speakerVolume.toString()
+                audioStream?.sendVolume = speakerVolume
+                scheduleVolumeHide()
+            }
+            override fun onStartTrackingTouch(sb: android.widget.SeekBar) { volumeHideTask?.cancel() }
+            override fun onStopTrackingTouch(sb: android.widget.SeekBar) {
+                prefs.edit().putInt("speakerVolume", speakerVolume).apply()
+                scheduleVolumeHide()
+            }
+        })
+    }
+
+    /** 3 秒无操作自动收起音量面板 */
+    private fun scheduleVolumeHide() {
+        volumeHideTask?.cancel()
+        volumeHideTask = object : java.util.TimerTask() {
+            override fun run() {
+                runOnUiThread { binding.volumePanel.visibility = View.GONE }
+            }
+        }
+        recordTimer.schedule(volumeHideTask, 3000)
     }
 
     private fun updateTrimDisplay() {
@@ -466,12 +497,20 @@ class ControlActivity : AppCompatActivity() {
 
     private fun updateVideoStats(bitrateKbps: Int, totalBytes: Long, fps: Int) {
         binding.tvFps.text = "帧率: $fps fps"
-        binding.tvBitrate.text = if (bitrateKbps >= 1000) {
-            "码率: ${"%.1f".format(bitrateKbps / 1000.0)} Mbps"
+        // 后视摄像头开启时，合并后视流量统计
+        val rear = rearCamStream
+        val rearBytesSec = if (isRearCamOn && rear != null) rear.bytesInSecond else 0L
+        val rearTotalBytes = if (isRearCamOn && rear != null) rear.totalBytes else 0L
+        val combinedBitrateKbps = bitrateKbps + (rearBytesSec * 8 / 1000).toInt()
+        val combinedTotal = totalBytes + rearTotalBytes
+        binding.tvBitrate.text = if (combinedBitrateKbps >= 1000) {
+            "码率: ${"%.1f".format(combinedBitrateKbps / 1000.0)} Mbps"
         } else {
-            "码率: $bitrateKbps kbps"
+            "码率: $combinedBitrateKbps kbps"
         }
-        binding.tvTraffic.text = "流量: ${formatBytes(totalBytes)}"
+        binding.tvTraffic.text = "流量: ${formatBytes(combinedTotal)}"
+        // 读取后重置后视每秒字节数
+        if (isRearCamOn && rear != null) rear.bytesInSecond = 0
     }
 
     private fun updateVideoConnection(connected: Boolean) {

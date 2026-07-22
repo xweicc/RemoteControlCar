@@ -83,6 +83,11 @@ class AudioStream {
     /** G.711a 编码开关，false 时使用 raw PCM */
     var useG711a = true
 
+    /** 设备扬声器音量档位 1~10（10=原始音量，发送前对 PCM 缩放），持久化由 UI 负责 */
+    @Volatile
+    var sendVolume: Int = 10
+        set(value) { field = value.coerceIn(1, 10) }
+
     @Volatile
     var isRunning = false
         private set
@@ -272,16 +277,28 @@ class AudioStream {
             while (isMicActive && isRunning) {
                 val read = rec.read(pcmBuf, 0, pcmBuf.size)
                 if (read <= 0) break
+                val vol = sendVolume  // 快照，避免循环中变化
                 if (useG711a) {
-                    // PCM → G.711a 编码 → 发送
+                    // PCM → 音量缩放 → G.711a 编码 → 发送
                     val sampleCount = read / 2
                     for (i in 0 until sampleCount) {
-                        pcmShort[i] = ((pcmBuf[i * 2].toInt() and 0xFF) or (pcmBuf[i * 2 + 1].toInt() shl 8)).toShort()
+                        var s = (pcmBuf[i * 2].toInt() and 0xFF) or (pcmBuf[i * 2 + 1].toInt() shl 8)
+                        if (vol < 10) s = (s * vol / 10).coerceIn(-32768, 32767)
+                        pcmShort[i] = s.toShort()
                     }
                     encodeAlaw(pcmShort, alawOut, sampleCount)
                     os.write(alawOut, 0, sampleCount)
                 } else {
-                    // raw PCM 直接发送
+                    // raw PCM → 音量缩放 → 直接发送
+                    if (vol < 10) {
+                        val sampleCount = read / 2
+                        for (i in 0 until sampleCount) {
+                            var s = (pcmBuf[i * 2].toInt() and 0xFF) or (pcmBuf[i * 2 + 1].toInt() shl 8)
+                            s = (s * vol / 10).coerceIn(-32768, 32767)
+                            pcmBuf[i * 2] = s.toByte()
+                            pcmBuf[i * 2 + 1] = (s shr 8).toByte()
+                        }
+                    }
                     os.write(pcmBuf, 0, read)
                 }
                 os.flush()

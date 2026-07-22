@@ -21,6 +21,7 @@
     <string name="cd_mic_off">麦克风：关闭</string>
     <string name="cd_mic_on">麦克风：开启</string>
     <string name="cd_map">定位地图</string>
+    <string name="cd_volume">扬声器音量</string>
     <string name="map_title">遥控车定位</string>
     <string name="map_close">关闭地图</string>
     <string name="label_motor_mode">电机模式</string>

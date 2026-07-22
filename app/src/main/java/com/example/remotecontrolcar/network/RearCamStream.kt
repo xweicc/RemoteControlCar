@@ -26,6 +26,11 @@ class RearCamStream(
         private set
     @Volatile private var decoderStarted = false
 
+    /** 每秒接收字节数（由外部每秒读取并重置） */
+    @Volatile var bytesInSecond: Long = 0
+    /** 累计接收总字节数 */
+    @Volatile var totalBytes: Long = 0
+
     private var host = ""
     private var port = 0
 
@@ -65,6 +70,8 @@ class RearCamStream(
                 while (isRunning && !sock.isClosed) {
                     val len = input.read(buf)
                     if (len < 0) break
+                    totalBytes += len
+                    bytesInSecond += len
                     appendAndParseNals(buf, len)
                 }
             } catch (_: Exception) {
